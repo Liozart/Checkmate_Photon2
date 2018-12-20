@@ -1,4 +1,12 @@
-﻿ using System.Collections;
+﻿// ----------------------------------------------------------------------------  
+// GameSetup.cs  
+// <summary>  
+// Manage the different Canvas in NetworkScene, handle the server creation/connexion
+// </summary>  
+// <author>Léo Pichat</author>  
+// ----------------------------------------------------------------------------  
+
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,34 +22,48 @@ public class GameSetup : MonoBehaviourPunCallbacks {
     public Text nameText;
     public Text adressText;
 
-    // Lobby is singleton
+    // the lobby is a singleton
     public static GameSetup lobby;
     public static string roomName = "room1";
     public static string levelName = "GameScene";
     private byte playerNumber = 12;
 
-    private bool isRoomLoaded;
-
+    /// <summary>  
+    /// GameObject Awake  
+    /// </summary>  
     void Awake () {
         lobby = this;
-        //PhotonNetwork.AutomaticallySyncScene = true;
-        isRoomLoaded = false;
     }
 
+    /// <summary>  
+    /// GameObject Start  
+    /// </summary>  
     void Start()
     {
-        //Connect to photon servers
+        //Connect to photon Cloud servers
         PhotonNetwork.ConnectUsingSettings();
     }
 
-    // Create a client and connect to the server port
+    /// <summary>  
+    /// Callback for connexion to Photon servers
+    /// </summary>  
+    public override void OnConnectedToMaster()
+    {
+        networkCanvas.gameObject.SetActive(true);
+    }
+
+    /// <summary>  
+	/// "Rejoindre" button function, connect the client to a room (there's only one anyway)
+	/// </summary>
     public void SetupClient()
     {
         PhotonNetwork.JoinRandomRoom();
         DisplaySelection(false);
     }
 
-    // Create a a server and local client and connect to the local server
+    /// <summary>  
+	/// "Créer partie" button function, create a room with options
+	/// </summary>  
     public void SetupServerAndClient()
     {
         RoomOptions roomOpts = new RoomOptions() { IsVisible = true, IsOpen = true, MaxPlayers = playerNumber };
@@ -49,12 +71,8 @@ public class GameSetup : MonoBehaviourPunCallbacks {
         DisplaySelection(true);
     }
 
-    public override void OnJoinedRoom()
-    {
-        isRoomLoaded = true;
-    }
-
-    //Display mode selection if host
+    /// <summary> Display the selection Canvas if host else directly the character Canvas </summary>  
+	/// <param name="serv">true if player is the host</param>
     void DisplaySelection(bool serv)
     {
         //ManagerSpawner.myClient = myClient;
@@ -67,7 +85,8 @@ public class GameSetup : MonoBehaviourPunCallbacks {
             characterCanvas.gameObject.SetActive(true);
     }
 
-    //When gamemode is set, change menu
+    /// <summary> Set the chosen gamemode and enable next canvas </summary>  
+	/// <param name="m">picked gamemode</param>
     public void SetMode(int m)
     {
         PlayerManager.chosenGameMode = m;
@@ -75,17 +94,12 @@ public class GameSetup : MonoBehaviourPunCallbacks {
         characterCanvas.gameObject.SetActive(true);
     }
 
-    //Then load the gamescene
+    /// <summary> Set the chosen character and load the scene </summary>  
+	/// <param name="c">picked character</param>
     public void SetCharacter(int c)
     {
         PlayerManager.chosenCharacter = c;
         PlayerManager.chosenName = nameText.text;
-
-        while (!isRoomLoaded)
-        {
-            StartCoroutine(WaitUntilLoaded());
-        }
-        
         PhotonNetwork.LoadLevel(levelName);
     }
 

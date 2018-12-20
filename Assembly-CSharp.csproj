@@ -138,6 +138,7 @@
     <None Include="Assets\Store Assets\Standard Assets\Effects\Projectors\Shaders\ProjectorMultiply.shader" />
     <None Include="Assets\Store Assets\Standard Assets\Characters\FirstPersonCharacter\FirstPersonCharacterGuidelines.txt" />
     <None Include="Assets\Store Assets\Free Low Poly Chess Set\README.txt" />
+    <None Include="Assets\Store Assets\SkySerie Freebie\Hdri setup.txt" />
     <None Include="Assets\Store Assets\Standard Assets\ParticleSystems\Shaders\PriorityParticleAdd.shader" />
     <None Include="Assets\Store Assets\Standard Assets\Effects\TessellationShaders\Shaders\BumpedSpecularDisplacement.shader" />
     <None Include="Assets\Store Assets\Photon\PhotonUnityNetworking\changelog.txt" />

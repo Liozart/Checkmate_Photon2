@@ -4,8 +4,12 @@
 TagManager:
   serializedVersion: 2
   tags:
-  - RespawnBlack
-  - Cobaye
+  - King
+  - Queen
+  - Pawn
+  - Map
+  - Gun
+  - PlayerManager
   layers:
   - Default
   - TransparentFX
