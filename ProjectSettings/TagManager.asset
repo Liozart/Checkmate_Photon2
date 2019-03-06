@@ -10,6 +10,7 @@ TagManager:
   - Map
   - Gun
   - PlayerManager
+  - WaitCamera
   layers:
   - Default
   - TransparentFX

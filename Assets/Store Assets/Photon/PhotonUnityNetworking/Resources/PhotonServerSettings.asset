@@ -33,4 +33,8 @@ MonoBehaviour:
   - SetTeam
   - UpdateTeams
   - SpawnWithTeam
+  - StartNewRound
+  - SendUpdateEvent
+  - PlayerReady
+  - PlayerDead
   DisableAutoOpenWizard: 1

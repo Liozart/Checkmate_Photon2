@@ -15,6 +15,12 @@ using UnityEngine.SceneManagement;
 using Photon.Pun;
 using Photon.Realtime;
 
+//Play state : Waiting for the next round to begin, or playing
+public enum PlayState
+{
+    Waiting, Playing
+}
+
 public class PlayerSystem: MonoBehaviourPun, IPunObservable
 {
     //Local instance of the player
@@ -40,13 +46,27 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     float nextFire = 0;
     bool isFiring = false;
 
+    // Shooting object 
     public GameObject pistol;
     EjectorShoot ejector;
     ParticleSystem particles;
+    // Attached FirstPersonController script  
     public FirstPersonController FPController;
     public PlayerManager playerManager;
+    //Top camera for waiting players
+    public GameObject waitCamera;
 
+    //State of the current player
+    public PlayState playState;
+
+    // UI text
+    //Stats
     public Text statsText;
+    //Win labels
+    public Text winWhiteText;
+    public Text winBlackText;
+    //Score
+    public Text scoresCanvas;
 
     bool onGameScene = false;
 
@@ -60,7 +80,6 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
         {
             stream.SendNext(pistol.transform.rotation);
             stream.SendNext(isFiring);
-            Debug.Log("SEND " + info.Sender + " : " + isFiring);
         }
         //Recieve updates (In the same send order)
         else
@@ -68,7 +87,6 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             Quaternion f = (Quaternion)stream.ReceiveNext();
             pistol.transform.rotation = f;
             isFiring = (bool)stream.ReceiveNext();
-            Debug.Log("GET " + info.Sender + " : " + isFiring);
         }
     }
 
@@ -90,6 +108,9 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     /// </summary>  
     void Start()
     {
+        //Waiting at first
+        playState = PlayState.Waiting;
+
         //Set character stats
         character = PlayerManager.chosenCharacter;
         InitChosenCharacter();
@@ -118,6 +139,8 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             for (int i = 0; i < robjs.Length; i++)
                 if (robjs[i].gameObject.name == "MeshModel")
                     robjs[i].gameObject.SetActive(false);
+
+            playerManager = GameObject.FindGameObjectWithTag("PlayerManager").GetComponent<PlayerManager>();
         }
     }
 
@@ -131,20 +154,39 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
         if (!onGameScene)
             if (SceneManager.GetActiveScene().name == "GameScene")
             {
-                playerManager = GameObject.FindGameObjectWithTag("PlayerManager").GetComponent<PlayerManager>();
-                gameObject.SetActive(true);
                 onGameScene = true;
+                gameObject.SetActive(true);
+
+                if (photonView.IsMine)
+                {
+                    //Set wait camera
+                    waitCamera = GameObject.FindGameObjectWithTag("WaitCamera");
+                    SwitchPlayState(playState);
+
+                    //Send ready RPC to master when player finished inits
+                    playerManager.SetPlayerReady();
+                }
             }
 
         //Input and UI udpates are only local
         if (photonView.IsMine)
         {
+            //No inputs if waiting
+            if (playState == PlayState.Waiting)
+                return;
+
             //Shoot
             if (Input.GetKeyDown(KeyCode.Mouse0))
                 isFiring = true;
             else if (Input.GetKeyUp(KeyCode.Mouse0))
                 isFiring = false;
-            
+
+            //Display scoreboard
+            if (Input.GetKeyDown(KeyCode.Tab))
+                scoresCanvas.gameObject.SetActive(true);
+            if (Input.GetKeyUp(KeyCode.Tab))
+                scoresCanvas.gameObject.SetActive(false);
+
             UpdateUI();
         }
 
@@ -210,6 +252,20 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     }
 
     /// <summary>  
+    /// Set players ready to play and start round
+    /// </summary>  
+    public void StartNewRound()
+    {
+        if (photonView.IsMine)
+        {
+            winWhiteText.gameObject.SetActive(false);
+            winBlackText.gameObject.SetActive(false);
+            playState = PlayState.Playing;
+            SwitchPlayState(playState);
+        }
+    }
+
+    /// <summary>  
     /// Call the ejector's fire function and particles  
     /// </summary> 
     void Fire()
@@ -229,11 +285,84 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             if (health <= 0)
             {
                 health = baseHealth;
-                //Set player position to spawn at death
+                playerManager.SetPlayerDead();
+                //Player is waiting until new round
+                playState = PlayState.Waiting;
+                SwitchPlayState(playState);
+            }
+        }
+    }
+
+    /// <summary>  
+    /// Called by server when the black team wins the current round
+    /// </summary>
+    public void WinBlackTeam()
+    {
+        if (photonView.IsMine)
+        {
+            //Display win text
+            winBlackText.gameObject.SetActive(true);
+            //Wait until next round
+            playState = PlayState.Waiting;
+            SwitchPlayState(playState);
+        }
+    }
+
+    /// <summary>  
+    /// Called by server when the white team wins the current round
+    /// </summary>
+    public void WinWhiteTeam()
+    {
+        if (photonView.IsMine)
+        {
+            //Display win text
+            winWhiteText.gameObject.SetActive(true);
+            //Wait until next round
+            playState = PlayState.Waiting;
+            SwitchPlayState(playState);
+        }
+    }
+
+    /// <summary>  
+    /// updates the scoreboard, called by server when score update event is handled
+    /// </summary>
+    public void UpdateScoreCanvas()
+    {
+        //Update scoreboard
+        scoresCanvas.text = "White team : " + playerManager.scorewhite + "\nBlack team : " + playerManager.scoreblack;
+    }
+
+    /// <summary>  
+    /// Set the properties of the player for it's current state
+    /// <param name="state"/>The state to switch to</param>
+    /// </summary>
+    void SwitchPlayState(PlayState state)
+    {
+        if (photonView.IsMine)
+        {
+            //Player is waiting for round
+            if (state == PlayState.Waiting)
+            {
+                //Enable spectator camera and disable inputs
+                waitCamera.SetActive(true);
+                gameObject.GetComponent<FirstPersonController>().enabled = false;
+                gameObject.GetComponentInChildren<Camera>().enabled = false;
+                gameObject.GetComponentInChildren<AudioListener>().enabled = false;
+                isFiring = false;
+
+                //Place player on respective spawn
                 if (playerManager.IsPlayerTeamBlack(PlayerManager.chosenName))
-                    gameObject.transform.position = playerManager.getBlackSpawnTransform().position;
+                    gameObject.transform.position = playerManager.GetBlackSpawnTransform().position;
                 else
-                    gameObject.transform.position = playerManager.getWhiteSpawnTransform().position;
+                    gameObject.transform.position = playerManager.GetWhiteSpawnTransform().position;
+            }
+            else
+            {
+                //Enable player object camera and enable inputs
+                waitCamera.SetActive(false);
+                gameObject.GetComponent<FirstPersonController>().enabled = true;
+                gameObject.GetComponentInChildren<Camera>().enabled = true;
+                gameObject.GetComponentInChildren<AudioListener>().enabled = true;
             }
         }
     }

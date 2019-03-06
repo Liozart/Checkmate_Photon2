@@ -17,6 +17,14 @@ using ExitGames.Client.Photon;
 
 public class PlayerManager : MonoBehaviourPunCallbacks
 {
+    // Custom Event 0: Used as "MoveUnitsToTargetPosition" event
+    const byte evCodeUpdateInfos = 0;
+    const byte evCodeStartRound = 1;
+    const byte evCodeWinBlack = 2;
+    const byte evCodeWinWhite = 3;
+    const byte evCodeUpdateScores = 4;
+
+    string freeTeamSlot = "§Free§";
 
     //Host selected gamemode
     public static int chosenGameMode;
@@ -29,18 +37,26 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     //0 : king, 1 : queen, 2 : pawn
     public GameObject[] playerPrefabsWhite;
     public GameObject[] playerPrefabsBlack;
+    public GameObject playerPrefab;
 
     //Respawn points position
     public GameObject spawnPointTeamWhite;
     public GameObject spawnPointTeamBlack;
 
     public int playersNumber;
+    public int playersReady;
     // teams lists
     public string[] teamWhite;
     public string[] teamBlack;
 
-    // EVENTS CODES
-    public byte updateTeamsEvenCode = 0;
+    public int playerAliveWhite;
+    public int playerAliveBlack;
+
+    //Scores
+    public int scorewhite;
+    public int scoreblack;
+
+    PlayState state;
 
     /// <summary>  
     /// GameObject Awake
@@ -48,9 +64,7 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     public void Awake()
     {
         DontDestroyOnLoad(this.gameObject);
-        teamWhite = new string[6];
-        teamBlack = new string[6];
-        //Adding callback on event recept
+        //PhotonNetwork.AddCallbackTarget(this);
         PhotonNetwork.NetworkingClient.EventReceived += OnEvent;
     }
 
@@ -59,6 +73,14 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     /// </summary>  
     public void Start()
     {
+        state = PlayState.Waiting;
+        teamWhite = new string[6];
+        teamBlack = new string[6];
+        SetTeamListSendable();
+        playersNumber = 0;
+        scoreblack = 0;
+        scorewhite = 0;
+        playersReady = 0;
         PhotonView photonView = PhotonView.Get(this);
         photonView.RPC("GetTeam", RpcTarget.MasterClient, chosenName);
     }
@@ -71,12 +93,12 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     {
         PhotonView photonView = PhotonView.Get(this);
         playersNumber++;
-        //Add alternatively the new player in each team
+        //Add alternatively the new player in a team
         if ((playersNumber % 2) == 1)
         {
             photonView.RPC("SpawnWithTeam", info.Sender, true);
             for (int i = 0; i < 6; i++)
-                if (string.IsNullOrEmpty(teamBlack[i]))
+                if (teamBlack[i].Equals(freeTeamSlot))
                 {
                     teamBlack[i] = name;
                     i = 6;
@@ -86,49 +108,15 @@ public class PlayerManager : MonoBehaviourPunCallbacks
         {
             photonView.RPC("SpawnWithTeam", info.Sender, false);
             for (int i = 0; i < 6; i++)
-                if (string.IsNullOrEmpty(teamWhite[i]))
+                if (teamWhite[i].Equals(freeTeamSlot))
                 {
                     teamWhite[i] = name;
                     i = 6;
                 }
         }
-        //Update the team lists
-        SendUpdateTeamsEvent();
-    }
 
-    // Server function
-    /// <summary>  
-    /// Update the team lists sending an event to every players
-    /// </summary> 
-    public void SendUpdateTeamsEvent()
-    {
-        //Send the lists as an unique object
-        object[] content = new object[] { playersNumber,
-            teamWhite[0], teamWhite[1], teamWhite[2],
-            teamWhite[3], teamWhite[4], teamWhite[5],
-            teamBlack[0], teamBlack[1], teamBlack[2],
-            teamBlack[3], teamBlack[4], teamBlack[5]};
-        RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
-        SendOptions sendOptions = new SendOptions { Reliability = true };
-        PhotonNetwork.RaiseEvent(updateTeamsEvenCode, content, raiseEventOptions, sendOptions);
-    }
-
-    // Client function
-    /// <summary>  
-    /// Photon event callback function
-    /// </summary> 
-    public void OnEvent(EventData photonEvent)
-    {
-        //Recieve teams and player number updates
-        if (photonEvent.Code == updateTeamsEvenCode)
-        {
-            object[] data = (object[])photonEvent.CustomData;
-            playersNumber = (int)data[0];
-            for (int i = 0; i < 6; i++)
-                teamWhite[i] = (string)data[1 + i];
-            for (int i = 0; i < 6; i++)
-                teamBlack[i] = (string)data[7 + i];
-        }
+        //Send updated infos to clients
+        SendTeamUpdateEvent();
     }
 
     // Client function
@@ -141,12 +129,176 @@ public class PlayerManager : MonoBehaviourPunCallbacks
         if (PlayerSystem.LocalPlayerInstance == null)
         {
             if (black)
-                PhotonNetwork.Instantiate(playerPrefabsBlack[chosenCharacter].name, spawnPointTeamBlack.transform.position, spawnPointTeamBlack.transform.rotation, 0);
+                playerPrefab = PhotonNetwork.Instantiate(playerPrefabsBlack[chosenCharacter].name, spawnPointTeamBlack.transform.position, spawnPointTeamBlack.transform.rotation, 0);
             else
-                PhotonNetwork.Instantiate(playerPrefabsWhite[chosenCharacter].name, spawnPointTeamWhite.transform.position, spawnPointTeamWhite.transform.rotation, 0);
+                playerPrefab = PhotonNetwork.Instantiate(playerPrefabsWhite[chosenCharacter].name, spawnPointTeamWhite.transform.position, spawnPointTeamWhite.transform.rotation, 0);
         }
         else
             Debug.Log("Ignoring scene load for player");
+    }
+
+    // Server/Client function
+    /// <summary> Recieve and execute events </summary> 
+    /// <param name="photonEvent"> contains the events infos </param>
+    public void OnEvent(EventData photonEvent)
+    {
+        switch (photonEvent.Code)
+        {
+            //Update game infos
+            case evCodeUpdateInfos:
+                object[] data = (object[])photonEvent.CustomData;
+                teamWhite = (string[])data[0];
+                teamBlack = (string[])data[1];
+                playersNumber = (int)data[2];
+                Debug.Log("Event update get");
+                break;
+            
+            //Round start
+            case evCodeStartRound:
+                playerPrefab.GetComponent<PlayerSystem>().StartNewRound();
+                Debug.Log("Event Start get");
+                break;
+
+            //Win events
+            //Black wins
+            case evCodeWinBlack:
+                playerPrefab.GetComponent<PlayerSystem>().WinBlackTeam();
+                state = PlayState.Waiting;
+                StartCoroutine(WaitForNextRound());
+                Debug.Log("Event black wins get");
+                break;
+
+            //White wins
+            case evCodeWinWhite:
+                playerPrefab.GetComponent<PlayerSystem>().WinWhiteTeam();
+                state = PlayState.Waiting;
+                StartCoroutine(WaitForNextRound());
+                Debug.Log("Event white wins get");
+                break;
+
+            //Update scores
+            case evCodeUpdateScores:
+                object[] data2 = (object[])photonEvent.CustomData;
+                scorewhite = (int)data2[0];
+                scoreblack = (int)data2[1];
+                playerPrefab.GetComponent<PlayerSystem>().UpdateScoreCanvas();
+                Debug.Log("Event scores get");
+                break;
+        }
+    }
+
+    // Server function
+    /// <summary> Send an event with updated teams infos </summary> 
+    public void SendTeamUpdateEvent()
+    {
+        //Object : [0]->teamWhite, [1]->teamBlack, [2]->players number
+        object[] content = new object[] { teamWhite, teamBlack, playersNumber };
+        //Send to others PlayerManagers
+        RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
+        SendOptions sendOptions = new SendOptions { Reliability = true };
+        PhotonNetwork.RaiseEvent(evCodeUpdateInfos, content, raiseEventOptions, sendOptions);
+    }
+
+    // Server function
+    /// <summary> Send an event with updated scores </summary> 
+    public void SendScoreUpdateEvent()
+    {
+        //Object : [0]->scoresWhite, [1]->scoresBlack
+        object[] content = new object[] { scorewhite, scoreblack };
+        //Send to others PlayerManagers
+        RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
+        SendOptions sendOptions = new SendOptions { Reliability = true };
+        PhotonNetwork.RaiseEvent(evCodeUpdateScores, content, raiseEventOptions, sendOptions);
+
+        //Update scores canvas for server
+        playerPrefab.GetComponent<PlayerSystem>().UpdateScoreCanvas();
+    }
+
+    // Client function
+    /// <summary> Call ready function on server </summary> 
+    public void SetPlayerReady()
+    {
+        photonView.RPC("PlayerReady", RpcTarget.MasterClient);
+    }
+
+    // Client function
+    /// <summary> Call player dead function on server </summary> 
+    public void SetPlayerDead()
+    {
+        photonView.RPC("PlayerDead", RpcTarget.MasterClient, PlayerManager.chosenName);
+    }
+
+    // Server function
+    /// <summary> Recieve "ready players" signal and launch a new round </summary> 
+    [PunRPC]
+    public void PlayerReady()
+    {
+        playersReady++;
+        //When a second player comes, launch the first round
+        if (playersReady > 1 && state == PlayState.Waiting)
+        {
+            RaiseEventOptions raiseEventOptions2 = new RaiseEventOptions { Receivers = ReceiverGroup.All };
+            SendOptions sendOptions = new SendOptions { Reliability = true };
+            PhotonNetwork.RaiseEvent(evCodeStartRound, null, raiseEventOptions2, sendOptions);
+            state = PlayState.Playing;
+
+            //All players are alive at start
+            playerAliveBlack = CountPlayerInTeam(true);
+            playerAliveWhite = CountPlayerInTeam(false);
+        }
+    }
+
+    // Server function
+    /// <summary> Recieve "ready players" signal and launch a new round </summary> 
+    [PunRPC]
+    public void PlayerDead(string name)
+    {
+        bool ok = false;
+        //Check in which team the player is
+        for (int i = 0; i < 6; i++)
+            if (teamBlack[i].Equals(name))
+            {
+                playerAliveBlack--;
+                ok = true;
+                Debug.Log("BLACKS DED");
+            }
+        if (!ok)
+        {
+            playerAliveWhite--;
+            Debug.Log("WHITE DED");
+         }
+
+        //Additionnal gamemode checks
+        switch (chosenGameMode)
+        {
+            //Deathmatch
+            //Check if a team is dead, send to players the winner
+            //and wait 5 seconds before starting a new round
+            case 0:
+                if (playerAliveBlack == 0 || playerAliveWhite == 0)
+                {
+                    state = PlayState.Waiting;
+                    RaiseEventOptions raiseEventOptions3 = new RaiseEventOptions { Receivers = ReceiverGroup.All };
+                    SendOptions sendOptions = new SendOptions { Reliability = true };
+                    if (playerAliveBlack == 0)
+                    {
+                        scorewhite++;
+                        PhotonNetwork.RaiseEvent(evCodeWinWhite, null, raiseEventOptions3, sendOptions);
+                        Debug.Log("WHITE WINS");
+                    }
+                    else
+                    {
+                        scoreblack++;
+                        PhotonNetwork.RaiseEvent(evCodeWinBlack, null, raiseEventOptions3, sendOptions);
+                        Debug.Log("BLACK WINS");
+                    }
+
+                    //Send scores
+                    SendScoreUpdateEvent();
+
+                }
+                break;
+        }
     }
 
     // Server function
@@ -164,7 +316,7 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     // Server function
     /// <summary> Get black spawn point </summary> 
     /// <returns> The transform of the black spawn point </returns>
-    public Transform getBlackSpawnTransform()
+    public Transform GetBlackSpawnTransform()
     {
         return spawnPointTeamBlack.transform;
     }
@@ -172,8 +324,56 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     // Server function
     /// <summary> Get white spawn point </summary> 
     /// <returns> The transform of the white spawn point </returns>
-    public Transform getWhiteSpawnTransform()
+    public Transform GetWhiteSpawnTransform()
     {
         return spawnPointTeamWhite.transform;
+    }
+
+    // Server function
+    /// <summary> Set the null in team arrays to "§free§" in order to the arrays to be sendables </summary> 
+    void SetTeamListSendable()
+    {
+        for (int i = 0; i < 6; i++)
+            if (string.IsNullOrEmpty(teamBlack[i]))
+                teamBlack[i] = freeTeamSlot;
+        for (int i = 0; i < 6; i++)
+            if (string.IsNullOrEmpty(teamWhite[i]))
+                teamWhite[i] = freeTeamSlot;
+    }
+
+    /// <summary>  
+    //Returns the number of players in a team
+    /// <param name="black"/>true to count players in black team, false for white team</param>
+    /// <returns> the number of players </returns>
+    /// </summary>
+    public int CountPlayerInTeam(bool black)
+    {
+        int cnt = 0;
+        if (black)
+        {
+            for (int i = 0; i < 6; i++)
+                if (!teamBlack[i].Equals(freeTeamSlot))
+                    cnt++;
+        }
+        else
+        {
+            for (int i = 0; i < 6; i++)
+                if (!teamWhite[i].Equals(freeTeamSlot))
+                    cnt++;
+        }
+        return cnt;
+    }
+
+    //Wait a bit when a team wins then starts a new round
+    IEnumerator WaitForNextRound()
+    {
+        yield return new WaitForSeconds(3.0f);
+        RaiseEventOptions raiseEventOptions4 = new RaiseEventOptions { Receivers = ReceiverGroup.All };
+        SendOptions sendOptions = new SendOptions { Reliability = true };
+        PhotonNetwork.RaiseEvent(evCodeStartRound, null, raiseEventOptions4, sendOptions);
+
+        playerAliveBlack = CountPlayerInTeam(true);
+        playerAliveWhite = CountPlayerInTeam(false);
+        state = PlayState.Playing;
     }
 }
