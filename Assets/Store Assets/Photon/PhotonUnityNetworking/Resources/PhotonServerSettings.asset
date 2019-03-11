@@ -37,4 +37,8 @@ MonoBehaviour:
   - SendUpdateEvent
   - PlayerReady
   - PlayerDead
+  - GetAbilityEffect_Healing
+  - GetAbilityEffect_Stopping
+  - ApplyAbilityEffect
+  - GetAbilityEffect_Healing2
   DisableAutoOpenWizard: 1

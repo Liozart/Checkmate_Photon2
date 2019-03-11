@@ -24,15 +24,13 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     const byte evCodeWinWhite = 3;
     const byte evCodeUpdateScores = 4;
 
-    string freeTeamSlot = "§Free§";
+    string freeTeamSlot = "§§§Free§§§";
 
     //Host selected gamemode
     public static int chosenGameMode;
     //Selected character
     public static int chosenCharacter;
     public static string chosenName;
-    //Is this local player in black team
-    public bool isTeamBlack;
 
     //0 : king, 1 : queen, 2 : pawn
     public GameObject[] playerPrefabsWhite;
@@ -150,13 +148,11 @@ public class PlayerManager : MonoBehaviourPunCallbacks
                 teamWhite = (string[])data[0];
                 teamBlack = (string[])data[1];
                 playersNumber = (int)data[2];
-                Debug.Log("Event update get");
                 break;
             
             //Round start
             case evCodeStartRound:
                 playerPrefab.GetComponent<PlayerSystem>().StartNewRound();
-                Debug.Log("Event Start get");
                 break;
 
             //Win events
@@ -165,7 +161,6 @@ public class PlayerManager : MonoBehaviourPunCallbacks
                 playerPrefab.GetComponent<PlayerSystem>().WinBlackTeam();
                 state = PlayState.Waiting;
                 StartCoroutine(WaitForNextRound());
-                Debug.Log("Event black wins get");
                 break;
 
             //White wins
@@ -173,7 +168,6 @@ public class PlayerManager : MonoBehaviourPunCallbacks
                 playerPrefab.GetComponent<PlayerSystem>().WinWhiteTeam();
                 state = PlayState.Waiting;
                 StartCoroutine(WaitForNextRound());
-                Debug.Log("Event white wins get");
                 break;
 
             //Update scores
@@ -182,7 +176,6 @@ public class PlayerManager : MonoBehaviourPunCallbacks
                 scorewhite = (int)data2[0];
                 scoreblack = (int)data2[1];
                 playerPrefab.GetComponent<PlayerSystem>().UpdateScoreCanvas();
-                Debug.Log("Event scores get");
                 break;
         }
     }
@@ -210,7 +203,7 @@ public class PlayerManager : MonoBehaviourPunCallbacks
         SendOptions sendOptions = new SendOptions { Reliability = true };
         PhotonNetwork.RaiseEvent(evCodeUpdateScores, content, raiseEventOptions, sendOptions);
 
-        //Update scores canvas for server
+        //Update player's scores canvas
         playerPrefab.GetComponent<PlayerSystem>().UpdateScoreCanvas();
     }
 
@@ -305,23 +298,32 @@ public class PlayerManager : MonoBehaviourPunCallbacks
     /// <summary> return true if player's team is black </summary> 
     /// <param name="name"> the name of the player </param>
     /// <returns> true if in black team </returns>
-    public bool IsPlayerTeamBlack(string name)
+    public bool IsPlayerTeamBlack(string playername)
     {
         for (int i = 0; i < 6; i++)
-            if (teamBlack[i] == name)
+            if (teamBlack[i] == playername)
                 return true;
         return false;
     }
-
-    // Server function
+    
+    /// <summary> return true if player's team is black </summary> 
+    /// <param name="name"> the name of the player </param>
+    /// <returns> true if in black team </returns>
+    public bool AreInSameTeam(string p1, string p2)
+    {
+        if (IsPlayerTeamBlack(p1) && IsPlayerTeamBlack(p2) ||
+            !IsPlayerTeamBlack(p1) && !IsPlayerTeamBlack(p2))
+            return true;
+        else return false;
+    }
+    
     /// <summary> Get black spawn point </summary> 
     /// <returns> The transform of the black spawn point </returns>
     public Transform GetBlackSpawnTransform()
     {
         return spawnPointTeamBlack.transform;
     }
-
-    // Server function
+    
     /// <summary> Get white spawn point </summary> 
     /// <returns> The transform of the white spawn point </returns>
     public Transform GetWhiteSpawnTransform()

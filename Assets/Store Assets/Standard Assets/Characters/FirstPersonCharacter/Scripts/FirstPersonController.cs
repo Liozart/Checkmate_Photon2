@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 using UnityStandardAssets.Utility;
@@ -47,6 +48,21 @@ namespace UnityStandardAssets.Characters.FirstPerson
          public void SetCharacterSpeed(int sp)
         {
             m_RunSpeed *= ((float) sp / 100.0f);
+        }
+
+        /** Temporary change speed when targeted by ability
+         * */
+        public void ChangeCharacterSpeedTemporary(int sp)
+        {
+            float original = m_RunSpeed;
+            m_RunSpeed *= ((float)sp / 100.0f);
+            StartCoroutine(ReinitBaseSpeed(original));
+        }
+
+        IEnumerator ReinitBaseSpeed(float original)
+        {
+            yield return new WaitForSeconds(4.0f);
+            m_RunSpeed = original;
         }
 
         /** Access to cursor state from PlayerSystem

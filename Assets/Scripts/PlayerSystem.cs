@@ -28,6 +28,7 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
 
     //chosen character
     public int character;
+    public string pseudo;
 
     //character stats, modified in init
     public int baseHealth = 100;
@@ -49,12 +50,16 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     // Shooting object 
     public GameObject pistol;
     EjectorShoot ejector;
-    ParticleSystem particles;
+    public ParticleSystem particlesFire;
+    public ParticleSystem particlesAbilityTargeted;
     // Attached FirstPersonController script  
     public FirstPersonController FPController;
     public PlayerManager playerManager;
     //Top camera for waiting players
     public GameObject waitCamera;
+
+    //Cooldown bool to limit ability use
+    bool canUseAbility;
 
     //State of the current player
     public PlayState playState;
@@ -80,6 +85,7 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
         {
             stream.SendNext(pistol.transform.rotation);
             stream.SendNext(isFiring);
+            stream.SendNext(pseudo);
         }
         //Recieve updates (In the same send order)
         else
@@ -87,6 +93,7 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             Quaternion f = (Quaternion)stream.ReceiveNext();
             pistol.transform.rotation = f;
             isFiring = (bool)stream.ReceiveNext();
+            pseudo = (string)stream.ReceiveNext();
         }
     }
 
@@ -114,12 +121,15 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
         //Set character stats
         character = PlayerManager.chosenCharacter;
         InitChosenCharacter();
+        pseudo = PlayerManager.chosenName;
 
         //retrieve components
         ejector = gameObject.GetComponentInChildren<EjectorShoot>();
         pistol = FPController.gameObject.GetComponentInChildren<MeshRenderer>().gameObject;
-        particles = gameObject.GetComponentInChildren<ParticleSystem>();
-        particles.Stop();
+        //Particles when firing
+        particlesFire.Stop();
+        //Particles when targeted by ability
+        particlesAbilityTargeted.Stop();
 
         //Disabling a few non-local components
         if (!photonView.IsMine)
@@ -141,6 +151,8 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
                     robjs[i].gameObject.SetActive(false);
 
             playerManager = GameObject.FindGameObjectWithTag("PlayerManager").GetComponent<PlayerManager>();
+
+            canUseAbility = true;
         }
     }
 
@@ -181,6 +193,31 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             else if (Input.GetKeyUp(KeyCode.Mouse0))
                 isFiring = false;
 
+            // Get special ability input
+            if (Input.GetKeyDown(KeyCode.Mouse1))
+            {
+                if (canUseAbility)
+                {
+                    //Raycast radius is large so players don't have to be exactly precise
+                    float castingRadius = 1.5f;
+                    float castingDistance = 20f;
+                    RaycastHit hit;
+                    Vector3 ray = transform.position + gameObject.GetComponent<CharacterController>().center;
+                    //if ability hit someone
+                    if (Physics.SphereCast(ray, castingRadius, transform.forward, out hit, castingDistance))
+                    {
+                        //Apply effect on player depending the team
+                        if (playerManager.AreInSameTeam(pseudo, hit.transform.gameObject.GetComponent<PlayerSystem>().pseudo))
+                            hit.transform.gameObject.GetPhotonView().RPC("GetAbilityEffect_Healing", RpcTarget.All);
+                        else
+                            hit.transform.gameObject.GetPhotonView().RPC("GetAbilityEffect_Stopping", RpcTarget.All);
+                        //start cooldown
+                        StartCoroutine(AbilityCooldown());
+                        canUseAbility = false;
+                    }
+                }
+            }
+
             //Display scoreboard
             if (Input.GetKeyDown(KeyCode.Tab))
                 scoresCanvas.gameObject.SetActive(true);
@@ -200,6 +237,31 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
                 Fire();
             }
         }
+    }
+
+    /// <summary>   
+    /// Get called when the player is targeted by a friendly player ability
+    /// </summary>  
+    [PunRPC]
+    public void GetAbilityEffect_Healing()
+    {
+        health = baseHealth;
+        particlesAbilityTargeted.startColor = Color.green;
+        particlesAbilityTargeted.Play();
+
+    }
+
+    /// <summary>  
+    /// Get called when the player is targeted by a enemy player ability
+    /// </summary>  
+    [PunRPC]
+    public void GetAbilityEffect_Stopping()
+    {
+        speed = 20;
+        FPController.ChangeCharacterSpeedTemporary(speed);
+        particlesAbilityTargeted.startColor = Color.red;
+        particlesAbilityTargeted.Play();
+        StartCoroutine(RechangeSpeed());
     }
 
     /// <summary>  
@@ -247,8 +309,9 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     /// </summary>  
     void UpdateUI()
     {
-        statsText.text = "| " + health + "\n| " + speed + "\n| " + damage +
-                        "\n| " + fireRate + "\n| " + bulletSpeed;
+        statsText.text = "| " + health + "\n| " + speed;
+        if (canUseAbility)
+            statsText.text += "\nAbility Available";
     }
 
     /// <summary>  
@@ -270,7 +333,7 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
     /// </summary> 
     void Fire()
     {
-        particles.Play();
+        particlesFire.Play();
         ejector.Fire(bulletSpeed, damage);
     }
 
@@ -365,5 +428,17 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
                 gameObject.GetComponentInChildren<AudioListener>().enabled = true;
             }
         }
+    }
+
+    IEnumerator AbilityCooldown()
+    {
+        yield return new WaitForSeconds(3.0f);
+        canUseAbility = true;
+    }
+
+    IEnumerator RechangeSpeed()
+    {
+        yield return new WaitForSeconds(4.0f);
+        speed = baseSpeed;
     }
 }
