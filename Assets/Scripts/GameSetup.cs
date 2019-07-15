@@ -18,6 +18,7 @@ public class GameSetup : MonoBehaviourPunCallbacks {
 
     public Canvas networkCanvas;
     public Canvas modeCanvas;
+    public Canvas loadCanvas;
     public Canvas characterCanvas;
     public Text nameText;
     public Text adressText;
@@ -82,7 +83,10 @@ public class GameSetup : MonoBehaviourPunCallbacks {
             modeCanvas.gameObject.SetActive(true);
         }
         else
-            characterCanvas.gameObject.SetActive(true);
+        {
+            loadCanvas.gameObject.SetActive(true);
+            StartCoroutine(WaitUntilNetworkObjectsLoaded());
+        }
     }
 
     /// <summary> Set the chosen gamemode and enable next canvas </summary>  
@@ -103,8 +107,10 @@ public class GameSetup : MonoBehaviourPunCallbacks {
         PhotonNetwork.LoadLevel(levelName);
     }
 
-    IEnumerator WaitUntilLoaded()
+    IEnumerator WaitUntilNetworkObjectsLoaded()
     {
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(5f);
+        loadCanvas.gameObject.SetActive(false);
+        characterCanvas.gameObject.SetActive(true);
     }
 }

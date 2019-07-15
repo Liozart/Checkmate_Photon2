@@ -253,13 +253,9 @@ public class PlayerManager : MonoBehaviourPunCallbacks
             {
                 playerAliveBlack--;
                 ok = true;
-                Debug.Log("BLACKS DED");
             }
         if (!ok)
-        {
             playerAliveWhite--;
-            Debug.Log("WHITE DED");
-         }
 
         //Additionnal gamemode checks
         switch (chosenGameMode)
@@ -277,13 +273,11 @@ public class PlayerManager : MonoBehaviourPunCallbacks
                     {
                         scorewhite++;
                         PhotonNetwork.RaiseEvent(evCodeWinWhite, null, raiseEventOptions3, sendOptions);
-                        Debug.Log("WHITE WINS");
                     }
                     else
                     {
                         scoreblack++;
                         PhotonNetwork.RaiseEvent(evCodeWinBlack, null, raiseEventOptions3, sendOptions);
-                        Debug.Log("BLACK WINS");
                     }
 
                     //Send scores

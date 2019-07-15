@@ -94,6 +94,7 @@ public class PlayerSystem: MonoBehaviourPun, IPunObservable
             pistol.transform.rotation = f;
             isFiring = (bool)stream.ReceiveNext();
             pseudo = (string)stream.ReceiveNext();
+            
         }
     }
 
